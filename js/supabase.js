@@ -6,7 +6,7 @@ from
 
 
 const SUPABASE_URL =
-'https://YOUR-PROJECT-ID.supabase.co';
+'https://zrdesyskvcmvdyrbutkq.supabase.co';
 
 
 const SUPABASE_ANON_KEY =
