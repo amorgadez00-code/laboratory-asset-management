@@ -1,1 +1,459 @@
+<!DOCTYPE html>
 
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Borrowing Requests</title>
+
+<link rel="stylesheet"
+href="css/style.css">
+
+</head>
+
+<body>
+
+<nav>
+
+<a href="dashboard.html">
+Dashboard
+</a>
+
+<a href="equipment.html">
+Equipment
+</a>
+
+<a href="requests.html">
+Requests
+</a>
+
+</nav>
+
+
+<div class="container">
+
+<h1>Borrow Equipment</h1>
+
+
+<form id="requestForm">
+
+<label>Equipment</label>
+
+<select
+id="equipment"
+required>
+</select>
+
+
+<label>Quantity</label>
+
+<input
+type="number"
+id="quantity"
+min="1"
+value="1"
+required
+>
+
+
+<label>Purpose</label>
+
+<textarea
+id="purpose"
+required>
+</textarea>
+
+
+<label>
+Expected Return Date
+</label>
+
+<input
+type="date"
+id="returnDate"
+required
+>
+
+
+<button type="submit">
+Submit Request
+</button>
+
+</form>
+
+
+<p id="message"></p>
+
+
+<h2>My Requests</h2>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Equipment</th>
+
+<th>Quantity</th>
+
+<th>Purpose</th>
+
+<th>Status</th>
+
+<th>Date</th>
+
+</tr>
+
+</thead>
+
+<tbody id="requestTable">
+
+</tbody>
+
+</table>
+
+
+</div>
+
+
+<script type="module">
+
+import {
+    supabase
+}
+from "./js/supabase.js";
+
+
+let currentUser;
+
+
+async function initialize() {
+
+    const {
+        data: {
+            user
+        }
+    } =
+    await supabase.auth.getUser();
+
+
+    if (!user) {
+
+        window.location.href =
+        "login.html";
+
+        return;
+
+    }
+
+
+    currentUser = user;
+
+
+    await loadEquipment();
+
+    await loadRequests();
+
+}
+
+
+async function loadEquipment() {
+
+    const { data } =
+    await supabase
+    .from("equipment")
+    .select("*")
+    .eq("status", "Available")
+    .gt("quantity", 0)
+    .order("equipment_name");
+
+
+    const select =
+    document.getElementById(
+        "equipment"
+    );
+
+
+    select.innerHTML =
+    '<option value="">Select Equipment</option>';
+
+
+    data.forEach(item => {
+
+        select.innerHTML += `
+
+        <option value="${item.id}">
+
+            ${item.equipment_code}
+            -
+            ${item.equipment_name}
+            (${item.quantity} available)
+
+        </option>
+
+        `;
+
+    });
+
+}
+
+
+document.getElementById(
+    "requestForm"
+).addEventListener(
+"submit",
+async function(event) {
+
+    event.preventDefault();
+
+
+    const equipmentId =
+    document.getElementById(
+        "equipment"
+    ).value;
+
+
+    const quantity =
+    Number(
+        document.getElementById(
+            "quantity"
+        ).value
+    );
+
+
+    const purpose =
+    document.getElementById(
+        "purpose"
+    ).value;
+
+
+    const returnDate =
+    document.getElementById(
+        "returnDate"
+    ).value;
+
+
+    // Check equipment
+    const { data: equipment } =
+    await supabase
+    .from("equipment")
+    .select("*")
+    .eq("id", equipmentId)
+    .single();
+
+
+    if (!equipment) {
+
+        alert(
+            "Equipment not found."
+        );
+
+        return;
+
+    }
+
+
+    // BR-A4-01
+    if (
+        equipment.status !==
+        "Available"
+    ) {
+
+        alert(
+            "Only available equipment may be requested."
+        );
+
+        return;
+
+    }
+
+
+    // BR-A4-09
+    if (
+        equipment.status ===
+        "Maintenance"
+    ) {
+
+        alert(
+            "Equipment under maintenance cannot be borrowed."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        quantity >
+        equipment.quantity
+    ) {
+
+        alert(
+            "Requested quantity is greater than available quantity."
+        );
+
+        return;
+
+    }
+
+
+    const { data, error } =
+    await supabase
+    .from("borrowing_requests")
+    .insert({
+
+        requester_id:
+        currentUser.id,
+
+        equipment_id:
+        equipmentId,
+
+        quantity:
+        quantity,
+
+        purpose:
+        purpose,
+
+        expected_return_date:
+        returnDate,
+
+        status:
+        "Pending"
+
+    })
+    .select()
+    .single();
+
+
+    if (error) {
+
+        alert(error.message);
+
+        return;
+
+    }
+
+
+    // Audit trail
+    await supabase
+    .from("audit_logs")
+    .insert({
+
+        user_id:
+        currentUser.id,
+
+        action:
+        "SUBMITTED",
+
+        module:
+        "Borrowing",
+
+        record_id:
+        data.id,
+
+        description:
+        "Submitted borrowing request for "
+        +
+        equipment.equipment_code
+
+    });
+
+
+    document.getElementById(
+        "message"
+    ).textContent =
+    "Request submitted successfully.";
+
+    document.getElementById(
+        "requestForm"
+    ).reset();
+
+
+    await loadRequests();
+
+});
+
+
+async function loadRequests() {
+
+    const {
+        data,
+        error
+    } =
+    await supabase
+    .from("borrowing_requests")
+    .select(`
+        *,
+        equipment (
+            equipment_code,
+            equipment_name
+        )
+    `)
+    .eq(
+        "requester_id",
+        currentUser.id
+    )
+    .order(
+        "created_at",
+        {
+            ascending: false
+        }
+    );
+
+
+    const table =
+    document.getElementById(
+        "requestTable"
+    );
+
+
+    table.innerHTML = "";
+
+
+    data.forEach(request => {
+
+        table.innerHTML += `
+
+        <tr>
+
+            <td>
+                ${request.equipment.equipment_name}
+            </td>
+
+            <td>
+                ${request.quantity}
+            </td>
+
+            <td>
+                ${request.purpose}
+            </td>
+
+            <td>
+                ${request.status}
+            </td>
+
+            <td>
+                ${new Date(
+                    request.created_at
+                ).toLocaleDateString()}
+            </td>
+
+        </tr>
+
+        `;
+
+    });
+
+}
+
+
+initialize();
+
+</script>
+
+</body>
+
+</html>
