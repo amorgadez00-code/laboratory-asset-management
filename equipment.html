@@ -1,1 +1,163 @@
+<!DOCTYPE html>
 
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>Equipment</title>
+
+<link rel="stylesheet"
+href="css/style.css">
+
+</head>
+
+<body>
+
+<nav>
+
+<a href="dashboard.html">
+Dashboard
+</a>
+
+<a href="equipment.html">
+Equipment
+</a>
+
+<a href="requests.html">
+Requests
+</a>
+
+</nav>
+
+
+<div class="container">
+
+<h1>Available Equipment</h1>
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Code</th>
+
+<th>Name</th>
+
+<th>Category</th>
+
+<th>Quantity</th>
+
+<th>Condition</th>
+
+<th>Status</th>
+
+<th>Location</th>
+
+</tr>
+
+</thead>
+
+<tbody id="equipmentTable">
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<script type="module">
+
+import {
+    supabase
+}
+from "./js/supabase.js";
+
+
+async function loadEquipment() {
+
+    const {
+        data,
+        error
+    } =
+    await supabase
+    .from("equipment")
+    .select("*")
+    .order("id");
+
+
+    if (error) {
+
+        console.error(error);
+
+        return;
+
+    }
+
+
+    const table =
+    document.getElementById(
+        "equipmentTable"
+    );
+
+
+    table.innerHTML = "";
+
+
+    data.forEach(
+    equipment => {
+
+        table.innerHTML += `
+
+        <tr>
+
+            <td>
+                ${equipment.equipment_code}
+            </td>
+
+            <td>
+                ${equipment.equipment_name}
+            </td>
+
+            <td>
+                ${equipment.category}
+            </td>
+
+            <td>
+                ${equipment.quantity}
+            </td>
+
+            <td>
+                ${equipment.condition}
+            </td>
+
+            <td>
+                ${equipment.status}
+            </td>
+
+            <td>
+                ${equipment.location}
+            </td>
+
+        </tr>
+
+        `;
+
+    });
+
+}
+
+
+loadEquipment();
+
+</script>
+
+</body>
+
+</html>
