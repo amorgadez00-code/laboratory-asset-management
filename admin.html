@@ -1,1 +1,839 @@
+<!DOCTYPE html>
 
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Administrator</title>
+
+<link rel="stylesheet"
+href="css/style.css">
+
+</head>
+
+<body>
+
+<nav>
+
+<a href="dashboard.html">
+Dashboard
+</a>
+
+<a href="equipment.html">
+Equipment
+</a>
+
+<a href="admin.html">
+Admin
+</a>
+
+<a href="audit.html">
+Audit Logs
+</a>
+
+</nav>
+
+
+<div class="container">
+
+<h1>Administrator Panel</h1>
+
+<h2>Borrowing Requests</h2>
+
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+
+<th>Requester</th>
+
+<th>Equipment</th>
+
+<th>Quantity</th>
+
+<th>Purpose</th>
+
+<th>Status</th>
+
+<th>Action</th>
+
+</tr>
+
+</thead>
+
+<tbody id="adminRequests">
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<script type="module">
+
+import {
+    supabase
+}
+from "./js/supabase.js";
+
+
+let currentUser;
+
+
+async function initialize() {
+
+    const {
+        data: {
+            user
+        }
+    } =
+    await supabase.auth.getUser();
+
+
+    if (!user) {
+
+        window.location.href =
+        "login.html";
+
+        return;
+
+    }
+
+
+    currentUser = user;
+
+
+    const { data: profile } =
+    await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+
+    if (
+        !profile ||
+        profile.role !==
+        "administrator"
+    ) {
+
+        alert(
+            "Access denied."
+        );
+
+        window.location.href =
+        "dashboard.html";
+
+        return;
+
+    }
+
+
+    loadRequests();
+
+}
+
+
+async function loadRequests() {
+
+    const {
+        data,
+        error
+    } =
+    await supabase
+    .from("borrowing_requests")
+    .select(`
+        *,
+        equipment (
+            equipment_code,
+            equipment_name
+        ),
+        profiles!borrowing_requests_requester_id_fkey (
+            full_name
+        )
+    `)
+    .order(
+        "created_at",
+        {
+            ascending: false
+        }
+    );
+
+
+    if (error) {
+
+        console.error(error);
+
+        return;
+
+    }
+
+
+    const table =
+    document.getElementById(
+        "adminRequests"
+    );
+
+
+    table.innerHTML = "";
+
+
+    data.forEach(request => {
+
+        let action = "";
+
+
+        if (
+            request.status ===
+            "Pending"
+        ) {
+
+            action = `
+
+            <button
+                onclick="approveRequest(${request.id})">
+
+                Approve
+
+            </button>
+
+            <button
+                onclick="rejectRequest(${request.id})">
+
+                Reject
+
+            </button>
+
+            `;
+
+        }
+
+
+        if (
+            request.status ===
+            "Approved"
+        ) {
+
+            action = `
+
+            <button
+                onclick="releaseRequest(${request.id})">
+
+                Release
+
+            </button>
+
+            `;
+
+        }
+
+
+        if (
+            request.status ===
+            "Released"
+        ) {
+
+            action = `
+
+            <button
+                onclick="returnRequest(${request.id})">
+
+                Return
+
+            </button>
+
+            `;
+
+        }
+
+
+        table.innerHTML += `
+
+        <tr>
+
+            <td>
+                ${request.id}
+            </td>
+
+            <td>
+                ${request.profiles.full_name}
+            </td>
+
+            <td>
+                ${request.equipment.equipment_name}
+            </td>
+
+            <td>
+                ${request.quantity}
+            </td>
+
+            <td>
+                ${request.purpose}
+            </td>
+
+            <td>
+                ${request.status}
+            </td>
+
+            <td>
+                ${action}
+            </td>
+
+        </tr>
+
+        `;
+
+    });
+
+}
+
+
+window.approveRequest =
+async function(requestId) {
+
+    const {
+        data: request
+    } =
+    await supabase
+    .from("borrowing_requests")
+    .select(`
+        *,
+        equipment (
+            equipment_code,
+            equipment_name,
+            status,
+            quantity
+        )
+    `)
+    .eq("id", requestId)
+    .single();
+
+
+    if (
+        request.status !==
+        "Pending"
+    ) {
+
+        alert(
+            "Only Pending requests can be approved."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        request.requester_id ===
+        currentUser.id
+    ) {
+
+        alert(
+            "You cannot approve your own request."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        request.equipment.status !==
+        "Available"
+    ) {
+
+        alert(
+            "Equipment is not available."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        request.quantity >
+        request.equipment.quantity
+    ) {
+
+        alert(
+            "Not enough equipment available."
+        );
+
+        return;
+
+    }
+
+
+    const { error } =
+    await supabase
+    .from("borrowing_requests")
+    .update({
+
+        status:
+        "Approved",
+
+        approved_by:
+        currentUser.id,
+
+        approved_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+        "id",
+        requestId
+    );
+
+
+    if (error) {
+
+        alert(error.message);
+
+        return;
+
+    }
+
+
+    await supabase
+    .from("audit_logs")
+    .insert({
+
+        user_id:
+        currentUser.id,
+
+        action:
+        "APPROVED",
+
+        module:
+        "Borrowing",
+
+        record_id:
+        requestId,
+
+        description:
+        "Approved borrowing request for "
+        +
+        request.equipment.equipment_code
+
+    });
+
+
+    alert(
+        "Request approved."
+    );
+
+
+    loadRequests();
+
+};
+
+
+window.rejectRequest =
+async function(requestId) {
+
+    const reason =
+    prompt(
+        "Enter rejection reason:"
+    );
+
+
+    if (!reason) {
+
+        return;
+
+    }
+
+
+    const {
+        data: request
+    } =
+    await supabase
+    .from("borrowing_requests")
+    .select(`
+        *,
+        equipment (
+            equipment_code
+        )
+    `)
+    .eq("id", requestId)
+    .single();
+
+
+    if (
+        request.status !==
+        "Pending"
+    ) {
+
+        alert(
+            "Only Pending requests can be rejected."
+        );
+
+        return;
+
+    }
+
+
+    const { error } =
+    await supabase
+    .from("borrowing_requests")
+    .update({
+
+        status:
+        "Rejected",
+
+        rejection_reason:
+        reason
+
+    })
+    .eq(
+        "id",
+        requestId
+    );
+
+
+    if (error) {
+
+        alert(error.message);
+
+        return;
+
+    }
+
+
+    await supabase
+    .from("audit_logs")
+    .insert({
+
+        user_id:
+        currentUser.id,
+
+        action:
+        "REJECTED",
+
+        module:
+        "Borrowing",
+
+        record_id:
+        requestId,
+
+        description:
+        "Rejected borrowing request for "
+        +
+        request.equipment.equipment_code
+
+    });
+
+
+    alert(
+        "Request rejected."
+    );
+
+
+    loadRequests();
+
+};
+
+
+window.releaseRequest =
+async function(requestId) {
+
+    const {
+        data: request
+    } =
+    await supabase
+    .from("borrowing_requests")
+    .select(`
+        *,
+        equipment (
+            equipment_code,
+            quantity,
+            status
+        )
+    `)
+    .eq(
+        "id",
+        requestId
+    )
+    .single();
+
+
+    // BR-A4-04
+    if (
+        request.status !==
+        "Approved"
+    ) {
+
+        alert(
+            "Only Approved requests may be released."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        request.equipment.status !==
+        "Available"
+    ) {
+
+        alert(
+            "Equipment is not available."
+        );
+
+        return;
+
+    }
+
+
+    if (
+        request.quantity >
+        request.equipment.quantity
+    ) {
+
+        alert(
+            "Not enough equipment available."
+        );
+
+        return;
+
+    }
+
+
+    const newQuantity =
+    request.equipment.quantity -
+    request.quantity;
+
+
+    // Update request
+    await supabase
+    .from("borrowing_requests")
+    .update({
+
+        status:
+        "Released",
+
+        released_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+        "id",
+        requestId
+    );
+
+
+    // BR-A4-05
+    await supabase
+    .from("equipment")
+    .update({
+
+        quantity:
+        newQuantity,
+
+        status:
+        "Borrowed"
+
+    })
+    .eq(
+        "id",
+        request.equipment_id
+    );
+
+
+    await supabase
+    .from("audit_logs")
+    .insert({
+
+        user_id:
+        currentUser.id,
+
+        action:
+        "RELEASED",
+
+        module:
+        "Borrowing",
+
+        record_id:
+        requestId,
+
+        description:
+        "Released equipment "
+        +
+        request.equipment.equipment_code
+
+    });
+
+
+    alert(
+        "Equipment released."
+    );
+
+
+    loadRequests();
+
+};
+
+
+window.returnRequest =
+async function(requestId) {
+
+    const {
+        data: request
+    } =
+    await supabase
+    .from("borrowing_requests")
+    .select(`
+        *,
+        equipment (
+            equipment_code,
+            quantity,
+            condition
+        )
+    `)
+    .eq(
+        "id",
+        requestId
+    )
+    .single();
+
+
+    // BR-A4-08
+    if (
+        request.status !==
+        "Released"
+    ) {
+
+        alert(
+            "This transaction has already been returned or cannot be returned."
+        );
+
+        return;
+
+    }
+
+
+    const returnedCondition =
+    prompt(
+        "Enter equipment condition: Good / Fair / Damaged",
+        request.equipment.condition
+    );
+
+
+    if (!returnedCondition) {
+
+        return;
+
+    }
+
+
+    let newStatus =
+    "Available";
+
+
+    if (
+        returnedCondition
+        .toLowerCase()
+        ===
+        "damaged"
+    ) {
+
+        newStatus =
+        "Maintenance";
+
+    }
+
+
+    const newQuantity =
+    request.equipment.quantity
+    +
+    request.quantity;
+
+
+    await supabase
+    .from("borrowing_requests")
+    .update({
+
+        status:
+        "Returned",
+
+        returned_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+        "id",
+        requestId
+    );
+
+
+    // BR-A4-06
+    await supabase
+    .from("equipment")
+    .update({
+
+        quantity:
+        newQuantity,
+
+        status:
+        newStatus,
+
+        condition:
+        returnedCondition
+
+    })
+    .eq(
+        "id",
+        request.equipment_id
+    );
+
+
+    await supabase
+    .from("audit_logs")
+    .insert({
+
+        user_id:
+        currentUser.id,
+
+        action:
+        "RETURNED",
+
+        module:
+        "Borrowing",
+
+        record_id:
+        requestId,
+
+        description:
+        "Returned equipment "
+        +
+        request.equipment.equipment_code
+
+    });
+
+
+    alert(
+        "Equipment returned."
+    );
+
+
+    loadRequests();
+
+};
+
+
+initialize();
+
+</script>
+
+</body>
+
+</html>
