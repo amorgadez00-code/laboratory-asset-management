@@ -1,1 +1,234 @@
+<!DOCTYPE html>
 
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<title>Dashboard</title>
+
+<link rel="stylesheet"
+href="css/style.css">
+
+</head>
+
+<body>
+
+<nav>
+
+<h2>Laboratory Asset System</h2>
+
+<a href="dashboard.html">
+Dashboard
+</a>
+
+<a href="equipment.html">
+Equipment
+</a>
+
+<a href="requests.html">
+Requests
+</a>
+
+<span id="adminMenu"></span>
+
+<button id="logout">
+Logout
+</button>
+
+</nav>
+
+
+<div class="container">
+
+<h1>
+Welcome, <span id="userName"></span>
+</h1>
+
+<p>
+Role:
+<strong id="userRole"></strong>
+</p>
+
+
+<div class="dashboard-cards">
+
+<div class="card">
+
+<h3>Total Equipment</h3>
+
+<p id="equipmentCount">
+0
+</p>
+
+</div>
+
+
+<div class="card">
+
+<h3>Pending Requests</h3>
+
+<p id="pendingCount">
+0
+</p>
+
+</div>
+
+
+<div class="card">
+
+<h3>Borrowed</h3>
+
+<p id="borrowedCount">
+0
+</p>
+
+</div>
+
+</div>
+
+</div>
+
+
+<script type="module">
+
+import {
+    supabase
+}
+from "./js/supabase.js";
+
+
+async function loadDashboard() {
+
+    const {
+        data: {
+            user
+        }
+    } =
+    await supabase.auth.getUser();
+
+
+    if (!user) {
+
+        window.location.href =
+        "login.html";
+
+        return;
+
+    }
+
+
+    const { data: profile } =
+    await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+
+    document.getElementById(
+        "userName"
+    ).textContent =
+    profile.full_name;
+
+
+    document.getElementById(
+        "userRole"
+    ).textContent =
+    profile.role;
+
+
+    if (
+        profile.role ===
+        "administrator"
+    ) {
+
+        document.getElementById(
+            "adminMenu"
+        ).innerHTML = `
+            <a href="admin.html">
+                Admin
+            </a>
+
+            <a href="audit.html">
+                Audit Logs
+            </a>
+        `;
+
+    }
+
+
+    const { count: equipmentCount } =
+    await supabase
+    .from("equipment")
+    .select("*", {
+        count: "exact",
+        head: true
+    });
+
+
+    document.getElementById(
+        "equipmentCount"
+    ).textContent =
+    equipmentCount || 0;
+
+
+    const { count: pendingCount } =
+    await supabase
+    .from("borrowing_requests")
+    .select("*", {
+        count: "exact",
+        head: true
+    })
+    .eq("status", "Pending");
+
+
+    document.getElementById(
+        "pendingCount"
+    ).textContent =
+    pendingCount || 0;
+
+
+    const { count: borrowedCount } =
+    await supabase
+    .from("equipment")
+    .select("*", {
+        count: "exact",
+        head: true
+    })
+    .eq("status", "Borrowed");
+
+
+    document.getElementById(
+        "borrowedCount"
+    ).textContent =
+    borrowedCount || 0;
+
+}
+
+
+document.getElementById(
+    "logout"
+).addEventListener(
+"click",
+async () => {
+
+    await supabase.auth.signOut();
+
+    window.location.href =
+    "login.html";
+
+});
+
+
+loadDashboard();
+
+</script>
+
+</body>
+
+</html>
