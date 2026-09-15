@@ -1,1 +1,218 @@
+<!DOCTYPE html>
 
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<title>Audit Logs</title>
+
+<link rel="stylesheet"
+href="css/style.css">
+
+</head>
+
+<body>
+
+<nav>
+
+<a href="dashboard.html">
+Dashboard
+</a>
+
+<a href="admin.html">
+Admin
+</a>
+
+<a href="audit.html">
+Audit Logs
+</a>
+
+</nav>
+
+
+<div class="container">
+
+<h1>Audit Logs</h1>
+
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+
+<th>User</th>
+
+<th>Action</th>
+
+<th>Module</th>
+
+<th>Record ID</th>
+
+<th>Description</th>
+
+<th>Date</th>
+
+</tr>
+
+</thead>
+
+
+<tbody id="auditTable">
+
+</tbody>
+
+</table>
+
+</div>
+
+
+<script type="module">
+
+import {
+    supabase
+}
+from "./js/supabase.js";
+
+
+async function loadAuditLogs() {
+
+    const {
+        data: {
+            user
+        }
+    } =
+    await supabase.auth.getUser();
+
+
+    if (!user) {
+
+        window.location.href =
+        "login.html";
+
+        return;
+
+    }
+
+
+    const {
+        data: profile
+    } =
+    await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+
+    if (
+        profile.role !==
+        "administrator"
+    ) {
+
+        alert(
+            "Access denied."
+        );
+
+        window.location.href =
+        "dashboard.html";
+
+        return;
+
+    }
+
+
+    const {
+        data,
+        error
+    } =
+    await supabase
+    .from("audit_logs")
+    .select(`
+        *,
+        profiles (
+            full_name
+        )
+    `)
+    .order(
+        "created_at",
+        {
+            ascending: false
+        }
+    );
+
+
+    if (error) {
+
+        console.error(error);
+
+        return;
+
+    }
+
+
+    const table =
+    document.getElementById(
+        "auditTable"
+    );
+
+
+    table.innerHTML = "";
+
+
+    data.forEach(log => {
+
+        table.innerHTML += `
+
+        <tr>
+
+            <td>
+                ${log.id}
+            </td>
+
+            <td>
+                ${log.profiles?.full_name || "Unknown"}
+            </td>
+
+            <td>
+                ${log.action}
+            </td>
+
+            <td>
+                ${log.module}
+            </td>
+
+            <td>
+                ${log.record_id || ""}
+            </td>
+
+            <td>
+                ${log.description}
+            </td>
+
+            <td>
+                ${new Date(
+                    log.created_at
+                ).toLocaleString()}
+            </td>
+
+        </tr>
+
+        `;
+
+    });
+
+}
+
+
+loadAuditLogs();
+
+</script>
+
+</body>
+
+</html>
